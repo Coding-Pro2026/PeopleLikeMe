@@ -254,3 +254,31 @@ test('stored location is only ~1km precise', async () => {
   const row = db.prepare('SELECT lat, lng FROM users WHERE pid = ?').get(u.me.pid);
   assert.equal(row.lat, 19.08); assert.equal(row.lng, 72.88);
 });
+
+test('weak or guessable passwords are refused, passphrases accepted', async () => {
+  const mk = (password, n) => ({ email: `pw${n}${Math.random().toString(36).slice(2, 6)}@example.com`, password, displayName: 'Pwtest', dob: dobYearsAgo(30), agree: true });
+  for (const [i, weak] of ['password1234', 'Welcome2024!', 'qwertyuiop12', '1234567890123', 'abcdefgh1234', 'aaaaaaaaaaaa'].entries()) {
+    assert.equal((await new Client().post('/api/signup', mk(weak, i))).status, 400, weak);
+  }
+  assert.equal((await new Client().post('/api/signup', mk('purple tiger lamp window', 9))).status, 201);
+});
+
+test('a future or absurd birth year is a typo (400), not an under-18 attempt: no block, no cookie', async () => {
+  const c = new Client();
+  const r = await c.post('/api/signup', { email: 'typo@example.com', password: PW, displayName: 'Typo', dob: '2999-01-01', agree: true });
+  assert.equal(r.status, 400);
+  assert.equal(c.cookies.plm_u18, undefined);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM email_blocklist WHERE email_hash = ?').get(require('../server/auth').sha256('typo@example.com')).c, 0);
+  const ok = await c.post('/api/signup', { email: 'typo@example.com', password: PW, displayName: 'Typo', dob: '1999-01-01', agree: true });
+  assert.equal(ok.status, 201, 'same browser can correct the typo');
+});
+
+test('if the verification email cannot be sent, signup says so instead of pretending', async () => {
+  const bad = createApp({ db: openDb(':memory:'), mail: async () => { throw new Error('relay down'); } });
+  const srv = await new Promise((r) => { const s = bad.listen(0, '127.0.0.1', () => r(s)); });
+  try {
+    const res = await fetch(`http://127.0.0.1:${srv.address().port}/api/signup`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-plm-csrf': '1' }, body: JSON.stringify({ email: 'nomail@example.com', password: PW, displayName: 'NoMail', dob: dobYearsAgo(30), agree: true }) });
+    const j = await res.json();
+    assert.equal(res.status, 201); assert.equal(j.emailSent, false);
+  } finally { srv.close(); }
+});

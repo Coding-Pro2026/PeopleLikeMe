@@ -206,7 +206,7 @@ views.signup = () => {
     const f = Object.fromEntries(new FormData(form));
     try {
       const r = await api('POST', '/signup', { email: f.email, password: f.password, displayName: f.displayName, dob: f.dob, agree: f.agree === 'on' });
-      S.devCode = r.devCode; await boot(); location.hash = '#/verify';
+      S.devCode = r.devCode; S.emailFailed = r.emailSent === false; await boot(); location.hash = '#/verify';
     } catch (x) { err.textContent = x.message; if (x.code === 'underage') form.replaceChildren(h('h2', {}, 'Sorry — 18+ only'), h('p', {}, 'PeopleLikeMe is for adults. Come back when you’re 18 — we’ll be here. 💜')); }
   } },
     h('h2', {}, 'Create your account'),
@@ -244,11 +244,12 @@ views.verify = () => {
     try { await api('POST', '/verify', { code: code.value.trim() }); await boot(); toast('Email verified ✅'); location.hash = '#/setup'; } catch (x) { err.textContent = x.message; }
   } },
     h('h2', {}, 'Check your email'),
-    h('p', { class: 'muted' }, `We sent a 6-digit code to ${S.user.email}. Verified emails keep fake accounts out.`),
+    h('p', { class: 'muted' }, S.emailFailed ? `We tried to email a 6-digit code to ${S.user.email}. Verified emails keep fake accounts out.` : `We sent a 6-digit code to ${S.user.email}. Verified emails keep fake accounts out.`),
+    S.emailFailed ? h('p', { class: 'callout warn small', role: 'alert' }, 'We couldn’t send the email just now. Tap “Send a new code” to try again — or contact support if it keeps failing.') : null,
     S.devCode ? h('p', { class: 'callout warn small' }, `Developer mode: no email is sent. Your code is ${S.devCode}.`) : null,
     h('div', { class: 'field' }, h('label', { for: 'vc' }, 'Code'), code), err,
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'submit' }, 'Verify'),
-      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { try { const r = await api('POST', '/verify/resend'); S.devCode = r.devCode; toast('New code sent.'); views.verify(); } catch (x) { toast(x.message, true); } } }, 'Send a new code'))));
+      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { try { const r = await api('POST', '/verify/resend'); S.devCode = r.devCode; S.emailFailed = false; toast('New code sent.'); views.verify(); } catch (x) { toast(x.message, true); } } }, 'Send a new code'))));
 };
 
 // ----- onboarding / profile editor -----

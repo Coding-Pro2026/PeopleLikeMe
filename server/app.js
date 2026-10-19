@@ -66,7 +66,9 @@ function createApp({ db = openDb(), mail = sendMail, fetchImpl = fetch } = {}) {
   const TEST = process.env.PLM_TEST === '1';
   const lim = (w, n, m, k) => (TEST ? (req, res, next) => next() : limiter(w, n, m, k));
   app.use('/api', lim(60_000, 240, 'Slow down a little — too many requests.'));
-  const authLimiter = lim(15 * 60_000, 20, 'Too many attempts. Please wait a few minutes.');
+  const loginLimiter = lim(15 * 60_000, 30, 'Too many sign-in attempts. Please wait a few minutes.');
+  const signupLimiter = lim(60 * 60_000, 15, 'Too many sign-ups from this network. Please try again later.');
+  const authLimiter = lim(15 * 60_000, 20, 'Too many attempts. Please wait a few minutes.'); // account deletion
   const byUser = (req) => `u${req.user?.id ?? req.ip}`;
 
   // ---- sessions ----
@@ -105,14 +107,14 @@ function createApp({ db = openDb(), mail = sendMail, fetchImpl = fetch } = {}) {
     return !PROD ? code : undefined;
   };
 
-  app.post('/api/signup', authLimiter, wrap(async (req, res) => {
+  app.post('/api/signup', signupLimiter, wrap(async (req, res) => {
     const b = req.body || {};
     const email = String(b.email || '').trim().toLowerCase();
     const emailHash = A.sha256(email);
     if (!isEmail(email)) throw new HttpError(400, 'Enter a valid email address.');
     // 18+ gate comes FIRST, before any account data is stored.
     const age = A.ageFromDob(String(b.dob || ''));
-    if (age == null || age > 110) throw new HttpError(400, 'Enter your real date of birth.');
+    if (age == null || age < 0 || age > 110) throw new HttpError(400, 'Enter your real date of birth.'); // future dates are a typo, not an under-18 attempt
     const nope = 'You must be 18 or older to use PeopleLikeMe.';
     if (readCookie(req, 'plm_u18') === '1') throw new HttpError(403, nope, 'underage');
     if (age < 18) {
@@ -134,25 +136,31 @@ function createApp({ db = openDb(), mail = sendMail, fetchImpl = fetch } = {}) {
       .run(A.newPid(), email, emailHash, pw, name, b.dob, Date.now());
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     setSession(res, user.id);
-    let devCode; try { devCode = await issueCode(user); } catch (e) { console.error('mail failed:', e.message); }
-    res.status(201).json({ ok: true, devCode });
+    let devCode, emailSent = true; try { devCode = await issueCode(user); } catch (e) { emailSent = false; console.error('mail failed:', e.message); }
+    res.status(201).json({ ok: true, emailSent, devCode });
   }));
 
-  app.post('/api/login', authLimiter, wrap(async (req, res) => {
+  // Lockout is per (email + IP): a stranger can't lock the real owner out from another address.
+  // A much higher per-email ceiling still stops distributed guessing.
+  const lockState = (key, max) => { const f = failures.get(key); return f && f.until > Date.now() ? f : null; };
+  const noteFailure = (key, max) => {
+    const f = failures.get(key); const stale = !f || Date.now() - f.last > 15 * 60_000;
+    const n = (stale ? 0 : f.n) + 1;
+    failures.set(key, { n, last: Date.now(), until: n >= max ? Date.now() + 15 * 60_000 : 0 });
+    if (failures.size > 10_000) failures.clear();
+  };
+  app.post('/api/login', loginLimiter, wrap(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 254);
     const password = String(req.body?.password || '').slice(0, 128);
-    const f = failures.get(email);
-    if (f && f.until > Date.now()) throw new HttpError(429, 'Too many failed attempts. Try again in a few minutes.');
+    const kPair = `${email}|${req.ip}`, kEmail = `${email}|*`;
+    if (lockState(kPair) || lockState(kEmail)) throw new HttpError(429, 'Too many failed attempts. Try again in a few minutes.');
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     const ok = await A.verifyPassword(password, user ? user.pw_hash : A.DUMMY_HASH);
     if (!user || !ok) {
-      const stale = !f || Date.now() - f.last > 15 * 60_000;
-      const n = (stale ? 0 : f.n) + 1;
-      failures.set(email, { n, last: Date.now(), until: n >= 5 ? Date.now() + 15 * 60_000 : 0 });
-      if (failures.size > 5000) failures.clear();
+      noteFailure(kPair, 5); noteFailure(kEmail, 25);
       throw new HttpError(401, 'Email or password is incorrect.');
     }
-    failures.delete(email);
+    failures.delete(kPair);
     setSession(res, user.id);
     res.json({ ok: true });
   }));
@@ -162,7 +170,7 @@ function createApp({ db = openDb(), mail = sendMail, fetchImpl = fetch } = {}) {
     res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true });
   }));
 
-  app.post('/api/verify', authLimiter, requireUser, wrap(async (req, res) => {
+  app.post('/api/verify', lim(15 * 60_000, 30, 'Too many attempts. Please wait a few minutes.', byUser), requireUser, wrap(async (req, res) => {
     const code = String(req.body?.code || '').trim();
     const row = db.prepare('SELECT * FROM email_codes WHERE user_id = ?').get(req.user.id);
     if (!row || row.expires_at < Date.now()) throw new HttpError(400, 'That code expired — request a new one.');

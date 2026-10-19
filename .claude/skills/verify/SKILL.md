@@ -24,7 +24,7 @@ PORT=3222 nohup node --no-warnings server/index.js > $SCRATCH/v.log 2>&1 & echo 
 - Surprise Spot venues need OpenStreetMap, which sandboxes often block; the UI then shows the "kind of place" fallback. That is expected.
 
 ## Security probes that have been worth running
-Stored-XSS payload in bio/favourite/wave note/chat (must render as text, 0 alerts); IDOR on `/api/chats/:id/*` as a third user (404); CSRF header/Origin; login lockout (5 fails -> 429, also blocks the real owner); IP auth limiter (20/15 min shared by signup/login/verify); verify-code brute force (5 tries).
+Stored-XSS payload in bio/favourite/wave note/chat (must render as text, 0 alerts); IDOR on `/api/chats/:id/*` as a third user (404); CSRF header/Origin; login lockout (5 fails per email+IP -> 429; with `PLM_TRUST_PROXY=1` simulate other IPs via `X-Forwarded-For`; a different IP must still get in; 25 fails across IPs locks the email); separate limiters for login (30/15 min), sign-up (15/h), verify (per user); verify-code brute force (5 tries).
 
 ## Gotchas
 - Screenshots: the deck animates in (~1.5 s); wait before capturing.

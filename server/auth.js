@@ -21,14 +21,27 @@ async function verifyPassword(pw, stored) {
 // Used to equalise timing when the account doesn't exist (no user enumeration by response time).
 const DUMMY_HASH = `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${Buffer.alloc(16).toString('base64')}$${Buffer.alloc(64).toString('base64')}`;
 
-const COMMON = new Set(['password', 'password1', 'password123', '1234567890', 'qwertyuiop', 'letmein123', 'iloveyou123', 'welcome123', 'abc1234567', 'passw0rd123']);
+// Bases that are guessable even with digits/symbols tacked on ("password1234", "Welcome2024!").
+const COMMON_BASES = new Set(['password', 'passw0rd', 'pass', 'welcome', 'letmein', 'qwerty', 'qwertyuiop', 'asdfgh', 'asdfghjkl', 'zxcvbn', 'iloveyou', 'admin', 'administrator', 'login', 'monkey', 'dragon', 'football', 'baseball', 'basketball', 'master', 'sunshine', 'princess', 'shadow', 'superman', 'batman', 'trustno', 'freedom', 'whatever', 'starwars', 'hello', 'secret', 'changeme', 'abc', 'abcdef', 'abcdefgh', 'peoplelikeme', 'friends', 'friend', 'google', 'facebook', 'default', 'summer', 'winter', 'spring', 'autumn', 'killer', 'jordan', 'michael', 'charlie', 'donald', 'ranger', 'hunter', 'soccer', 'hockey', 'cookie', 'flower', 'internet', 'computer', 'mustang', 'harley', 'matrix', 'access', 'maggie', 'buster', 'thomas', 'tigger', 'pepper', 'ginger', 'welcome1', 'test', 'testing', 'guest', 'user', 'india', 'mumbai', 'delhi']);
+const ROWS = ['qwertyuiopasdfghjklzxcvbnm', '1234567890', 'abcdefghijklmnopqrstuvwxyz'];
+function hasRun(pw, n) { // n+ consecutive keys on a keyboard row / alphabet / digits, forwards or backwards
+  const x = pw.toLowerCase();
+  for (const row of ROWS) for (const r of [row, [...row].reverse().join('')]) for (let i = 0; i + n <= x.length; i++) if (r.includes(x.slice(i, i + n))) return true;
+  return false;
+}
 function passwordProblem(pw, email = '') {
   if (typeof pw !== 'string') return 'Password is required.';
   if (pw.length < 10) return 'Use at least 10 characters.';
   if (pw.length > 128) return 'Password is too long (max 128).';
-  if (COMMON.has(pw.toLowerCase())) return 'That password is too common.';
-  if (email && pw.toLowerCase().includes(email.split('@')[0].toLowerCase()) && email.split('@')[0].length > 3) return 'Don’t put your email name in your password.';
-  if (new Set(pw).size < 5) return 'Use a more varied password.';
+  const letters = pw.toLowerCase().replace(/[^a-z]/g, '');
+  const base = pw.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/[0-9]+$/, '').replace(/^[0-9]+/, '');
+  if (COMMON_BASES.has(base) || (letters.length >= 4 && [...COMMON_BASES].some((w) => w.length >= 6 && base === w))) return 'That password is too easy to guess. Try a few random words instead.';
+  for (const w of COMMON_BASES) if (w.length >= 6 && base.startsWith(w) && base.length <= w.length + 4) return 'That password is too easy to guess. Try a few random words instead.';
+  if (/^[0-9\W_]+$/.test(pw)) return 'Add some letters — numbers alone are easy to guess.';
+  if (hasRun(pw.replace(/[^a-z0-9]/gi, ''), 6)) return 'Avoid keyboard or alphabet sequences like “qwerty” or “12345678”.';
+  if (new Set(pw.toLowerCase()).size < 6) return 'Use a more varied password.';
+  const local = email.split('@')[0].toLowerCase();
+  if (local.length > 3 && pw.toLowerCase().includes(local)) return 'Don’t put your email name in your password.';
   return null;
 }
 
