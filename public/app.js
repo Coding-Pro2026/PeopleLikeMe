@@ -105,31 +105,54 @@ function openWave(card, preset, onDone) {
   });
 }
 
+function openDetails(card, { remove, mode }) {
+  dialog((close) => {
+    const shared = new Set(card.sharedTags || []);
+    const tags = [...card.tags].sort((a, b) => (shared.has(b.id) - shared.has(a.id)));
+    return h('div', { class: 'stack detail' },
+      h('header', { class: 'row' }, avatar(card), h('div', { class: 'who' }, h('strong', {}, card.name), h('span', { class: 'muted small' }, [card.ageBand, card.city, card.distance].filter(Boolean).join(' · ')), h('div', {}, trustBadge(card.trust))), ring(card.score.total)),
+      h('div', { class: 'why' }, '💡 ', card.headline),
+      h('div', { class: 'bars' }, bar('Personality', card.score.personality), bar('Interests', card.score.interests)),
+      card.bio ? h('p', {}, card.bio) : null,
+      h('div', {}, h('h3', {}, 'Interests'), h('div', { class: 'chips' }, tags.map((t) => h('span', { class: 'chip' + (shared.has(t.id) ? ' shared' : '') }, t.emoji, ' ', t.label))), h('p', { class: 'hint' }, 'Outlined = you both like it.')),
+      card.favs?.length ? h('div', {}, h('h3', {}, 'Favourites'), h('p', { class: 'small' }, card.favs.map((f) => `${({ movie: '🎬', food: '🍴', place: '📍', music: '🎵', book: '📖' })[f.cat] || '⭐'} ${f.text}`).join('   '))) : null,
+      h('div', {}, h('h3', {}, 'Conversation starters'), h('div', { class: 'chips' }, card.starters.map((st) => h('button', { class: 'chip starter', onclick: () => { close(); openWave(card, st, remove); } }, st)))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn', onclick: () => { close(); openWave(card, '', remove); } }, mode === 'inbox' ? 'Wave back 👋' : 'Say hi 👋'),
+        h('button', { class: 'btn ghost', onclick: () => { close(); openReport(card, remove); } }, '🚩 Report'),
+        h('button', { class: 'btn ghost', onclick: () => { close(); openBlock(card, remove); } }, '🚫 Block'),
+        h('button', { class: 'btn soft', onclick: close }, 'Close')));
+  });
+}
+
 function personCard(card, { onChange, mode = 'discover' }) {
   const shared = new Set(card.sharedTags || []);
-  const tags = [...card.tags].sort((a, b) => (shared.has(b.id) - shared.has(a.id))).slice(0, 10);
-  const remove = () => { el.remove(); onChange?.(); };
-  const menu = h('details', {}, h('summary', { class: 'small' }, 'More'),
-    h('div', { class: 'row' },
-      h('button', { class: 'btn small ghost', onclick: () => openReport(card, remove) }, '🚩 Report'),
-      h('button', { class: 'btn small ghost', onclick: () => openBlock(card, remove) }, '🚫 Block')));
-  const el = h('article', { class: 'card' + (card.slot === 'wildcard' ? ' wild' : ''), 'aria-label': card.name },
-    card.slot === 'wildcard' ? h('div', { class: 'ribbon' }, '✨ Wildcard — your temperaments click, your interests differ') : null,
-    h('header', {}, avatar(card),
-      h('div', { class: 'who' }, h('strong', {}, card.name), h('span', { class: 'muted small' }, [card.ageBand, card.city, card.distance].filter(Boolean).join(' · ')), h('div', {}, trustBadge(card.trust), card.demo ? h('span', { class: 'badge demo' }, ' demo profile') : null)),
-      ring(card.score.total)),
-    h('div', { class: 'bars' }, bar('Personality', card.score.personality), bar('Interests', card.score.interests)),
-    h('div', { class: 'why' }, '💡 ', card.headline),
-    card.bio ? h('p', { class: 'small' }, card.bio) : null,
-    h('div', { class: 'chips' }, tags.map((t) => h('span', { class: 'chip' + (shared.has(t.id) ? ' shared' : ''), title: shared.has(t.id) ? 'You both like this' : '' }, t.emoji, ' ', t.label))),
-    card.sharedFavs?.length ? h('p', { class: 'small' }, '⭐ You both love: ', card.sharedFavs.map((f) => f.text).join(', ')) : null,
-    card.note ? h('div', { class: 'callout' }, h('strong', {}, card.name, ' says: '), card.note) : null,
-    h('details', {}, h('summary', {}, 'Conversation starters'), h('div', { class: 'chips' }, card.starters.map((s) => h('button', { class: 'chip starter', onclick: () => openWave(card, s, remove) }, s)))),
+  const sharedTags = card.tags.filter((t) => shared.has(t.id));
+  const shown = sharedTags.slice(0, 4);
+  const more = card.tags.length - shown.length;
+  const remove = () => { el.remove(); onChange?.(); refreshBadge(); };
+  const el = h('article', { class: 'card' + (card.slot === 'wildcard' ? ' wild' : ''), style: { '--h': hue(card.pid || card.name) }, 'aria-label': card.name },
+    h('div', { class: 'banner' }, card.slot === 'wildcard' ? h('span', { class: 'ribbon' }, '✨ Wildcard') : h('span', { class: 'ribbon' }, card.score.total >= 75 ? '💜 Great fit' : card.score.total >= 55 ? 'Good fit' : 'Worth a hello'), ring(card.score.total)),
+    h('div', { class: 'cardbody' },
+      h('div', { class: 'who' }, h('strong', {}, card.name, card.demo ? h('span', { class: 'badge demo' }, 'demo') : null), h('span', { class: 'muted small' }, [card.ageBand, card.distance].filter(Boolean).join(' · ')), trustBadge(card.trust)),
+      h('p', { class: 'why' }, card.headline),
+      shown.length ? h('div', { class: 'chips' }, shown.map((t) => h('span', { class: 'chip shared' }, t.emoji, ' ', t.label)), more > 0 ? h('span', { class: 'chip more' }, `+${more}`) : null) : null,
+      card.note ? h('div', { class: 'callout small' }, '“', card.note, '”') : null),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn', onclick: () => openWave(card, '', mode === 'discover' ? remove : () => { remove(); refreshBadge(); }) }, mode === 'inbox' ? 'Wave back 👋' : 'Say hi 👋'),
-      h('button', { class: 'btn soft', onclick: async () => { try { await api('POST', '/pass', { pid: card.pid }); remove(); refreshBadge(); } catch (x) { toast(x.message, true); } } }, mode === 'inbox' ? 'No thanks' : 'Not for me'),
-      menu));
+      h('button', { class: 'btn', onclick: () => openWave(card, '', remove) }, mode === 'inbox' ? 'Wave back 👋' : 'Say hi 👋'),
+      h('button', { class: 'btn soft', onclick: () => openDetails(card, { remove, mode }) }, 'Details'),
+      h('button', { class: 'btn ghost icon', 'aria-label': 'Not for me', title: 'Not for me', onclick: async () => { try { await api('POST', '/pass', { pid: card.pid }); remove(); } catch (x) { toast(x.message, true); } } }, '✕')));
+  el.prepend(h('div', { class: 'avatar big', 'aria-hidden': 'true', style: { '--h': hue(card.pid || card.name) } }, card.tags?.[0]?.emoji || '🙂'));
   return el;
+}
+
+// ---------- theme ----------
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme !== 'light';
+  const next = dark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('plm-theme', next); } catch { /* private mode */ }
+  renderTop();
 }
 
 // ---------- header ----------
@@ -138,6 +161,7 @@ function renderTop() {
   const link = (href, label, extra) => h('a', { href, 'aria-current': location.hash.startsWith(href) ? 'page' : null }, label, extra);
   $('#top').replaceChildren(
     h('a', { class: 'brand', href: u ? '#/discover' : '#/' }, '🫶 People', h('b', {}, 'Like'), 'Me'),
+    h('button', { class: 'themebtn', 'aria-label': 'Toggle light / dark theme', title: 'Toggle theme', onclick: toggleTheme }, document.documentElement.dataset.theme === 'light' ? '🌙' : '☀️'),
     h('nav', { 'aria-label': 'Main' }, u && u.onboarded && u.emailVerified ? [
       link('#/discover', 'Discover'), link('#/waves', 'Waves', S.waves ? h('span', { class: 'dot' }, S.waves) : null), link('#/chat', 'Coatroom'), link('#/safety', 'Safety'), link('#/settings', 'Me'),
     ] : u ? [link('#/safety', 'Safety'), h('a', { href: '#/logout' }, 'Sign out')] : [link('#/safety', 'Safety'), link('#/login', 'Sign in'), h('a', { class: 'btn small', href: '#/signup' }, 'Join free')]));
@@ -297,7 +321,7 @@ views.discover = async () => {
   let data;
   try { data = await api('GET', '/matches'); } catch (x) { return mount(h('p', { class: 'err' }, x.message)); }
   const grid = h('div', { class: 'cards' });
-  const head = h('div', { class: 'row' }, h('h2', { style: { margin: 0, 'margin-right': 'auto' } }, 'Your people nearby'));
+  const head = h('div', { class: 'row' }, h('div', { style: { 'margin-right': 'auto' } }, h('h2', { style: { margin: 0 } }, 'Your people nearby'), h('p', { class: 'muted small', style: { margin: 0 } }, 'Same score for both of you · nothing happens until someone waves')));
   const draw = (matches, recycled) => {
     grid.replaceChildren(...matches.map((m) => personCard(m, { onChange: check })));
     status.textContent = recycled ? 'You’ve seen everyone nearby — here’s a fresh round with new ordering.' : `${matches.length} suggestion${matches.length === 1 ? '' : 's'} · ${data.communitySize} members on PeopleLikeMe`;
@@ -311,7 +335,7 @@ views.discover = async () => {
   head.append(refresh);
   const status = h('p', { class: 'muted small' });
   const empty = h('div', { class: 'empty', hidden: true }, h('div', { class: 'big' }, '🌱'), h('h3', {}, 'No one new right now'), h('p', {}, 'You may be one of the first in your area, or you’ve seen everyone nearby. Try refresh, widen your distance in Me → Edit profile, or invite a friend — every new member makes matching better.'));
-  mount(head, status, h('p', { class: 'small callout' }, 'Scores are the same for both of you. 🟢 = highlighted tags are things you share. Take your time — nothing happens until someone waves.'), grid, empty);
+  mount(head, status, grid, empty);
   draw(data.matches);
 };
 
