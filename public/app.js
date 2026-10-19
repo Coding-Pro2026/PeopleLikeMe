@@ -413,29 +413,32 @@ views.chat = async (id) => {
     try { const r = await api('POST', `/chats/${id}/messages`, { text }); input.value = ''; if (r.warning) toast(r.warning, true); await poll(); msgs.scrollTop = msgs.scrollHeight; } catch (x) { err.textContent = x.message; }
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  const spotBox = h('div', { class: 'spot', hidden: true });
-  const showSpot = async (reroll) => {
-    spotBox.hidden = false; spotBox.replaceChildren(h('p', { class: 'muted small' }, 'Rolling the dice…'));
+  const loadSpot = async (spotBox, reroll) => {
+    spotBox.replaceChildren(h('p', { class: 'muted small' }, 'Rolling the dice…'));
     try {
       const { spot, tips } = await api('GET', `/chats/${id}/spot${reroll ? '?reroll=1' : ''}`);
       if (!spot) { spotBox.replaceChildren(h('p', {}, 'Couldn’t find a suggestion this time.')); return; }
       spotBox.replaceChildren(
         h('h4', {}, spot.emoji, ' ', spot.venue ? spot.venue.name : `Try ${spot.label}`),
         h('p', { class: 'small' }, spot.venue ? `${spot.label[0].toUpperCase()}${spot.label.slice(1)} roughly halfway between you. ` : (spot.offline ? 'Map service is busy, so here’s the kind of place to look for near the middle: ' : 'No listed venue found nearby, so here’s the kind of place to look for: '), `You didn’t list this type of place, but your other interests suggest you’d both enjoy it (${spot.affinity}% fit).`),
-        h('div', { class: 'row' }, spot.mapUrl ? h('a', { class: 'btn small soft', href: spot.mapUrl, target: '_blank', rel: 'noopener noreferrer' }, '🗺️ Open map') : null, h('button', { class: 'btn small ghost', onclick: () => showSpot(true) }, '🎲 Another surprise')),
+        h('div', { class: 'row' }, spot.mapUrl ? h('a', { class: 'btn small soft', href: spot.mapUrl, target: '_blank', rel: 'noopener noreferrer' }, '🗺️ Open map') : null, h('button', { class: 'btn small ghost', onclick: () => loadSpot(spotBox, true) }, '🎲 Another surprise')),
         h('ul', { class: 'small muted' }, tips.slice(0, 3).map((t) => h('li', {}, t))));
     } catch (x) { spotBox.replaceChildren(h('p', { class: 'err' }, x.message)); }
+  };
+  const showSpot = () => {
+    const box = h('div', { class: 'spot' });
+    dialog((close) => h('div', { class: 'stack' }, h('h2', {}, '🎲 Surprise Spot'), box, h('div', { class: 'row' }, h('button', { class: 'btn soft', onclick: close }, 'Close'))));
+    loadSpot(box, false);
   };
   const head = h('div', { class: 'chathead' },
     h('div', { class: 'row' }, avatar(w), h('div', { style: { 'margin-right': 'auto' } }, h('strong', {}, w.name), h('div', { class: 'small muted' }, [w.ageBand, w.city, w.distance].filter(Boolean).join(' · '))), trustBadge(w.trust), ring(w.score.total)),
     h('div', { class: 'why' }, '💡 ', w.headline),
     h('div', { class: 'chips' }, w.starters.slice(0, 3).map((s) => h('button', { class: 'chip starter', onclick: () => { input.value = s; input.focus(); } }, s))),
     h('div', { class: 'row' },
-      h('button', { class: 'btn small soft', onclick: () => showSpot(false) }, '🎲 Surprise Spot to meet'),
+      h('button', { class: 'btn small soft', onclick: showSpot }, '🎲 Surprise Spot to meet'),
       h('button', { class: 'btn small ghost', onclick: async () => { try { await api('POST', `/chats/${id}/vouch`); toast('Thanks — you vouched for ' + w.name + ' 💜'); } catch (x) { toast(x.message, true); } } }, '🤝 Vouch'),
       h('button', { class: 'btn small ghost', onclick: () => openReport(w, () => { location.hash = '#/chat'; }) }, '🚩 Report'),
-      h('button', { class: 'btn small ghost', onclick: () => openBlock(w, () => { location.hash = '#/chat'; }) }, '🚫 Block')),
-    spotBox);
+      h('button', { class: 'btn small ghost', onclick: () => openBlock(w, () => { location.hash = '#/chat'; }) }, '🚫 Block')));
   mount(h('div', { class: 'split chatwrap' }, sidebar, h('section', { class: 'chatbox', 'aria-label': 'Chat with ' + w.name }, head, msgs, h('div', { class: 'composer' }, input, h('button', { class: 'btn', onclick: send }, 'Send')), err)));
   await poll(); msgs.scrollTop = msgs.scrollHeight;
   S.timers.push(setInterval(() => { if (!document.hidden) poll(); }, 3000));

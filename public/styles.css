@@ -227,3 +227,15 @@ main.wide { padding-inline: 34px; }
 .deck { padding-inline: 14px; margin-inline: -14px; }
 .navbtn:first-child { left: -26px; } .navbtn:last-child { right: -26px; }
 @media (max-width: 1100px) { main.wide { padding-inline: 16px; } .navbtn:first-child { left: -8px; } .navbtn:last-child { right: -8px; } }
+
+/* ---- chat & waves fixes ---- */
+.list { grid-template-columns: minmax(0, 1fr); }
+.chathead { gap: 6px; padding: 10px 14px; }
+.chathead .ring { width: 48px; height: 48px; margin-top: 0; animation: none; } .chathead .ring span { width: 38px; height: 38px; font-size: .85rem; }
+.chathead .why { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .88rem; padding: 6px 10px; }
+.chathead .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.chathead .chip.starter { white-space: nowrap; flex: none; }
+.chathead .row { gap: 6px; }
+.card .actions .btn { white-space: nowrap; padding-inline: 14px; }
+.msgs { scroll-behavior: smooth; }
+.spot h4 { font-family: "Iowan Old Style", Georgia, serif; font-size: 1.2rem; }
