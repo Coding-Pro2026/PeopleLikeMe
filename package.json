@@ -1,0 +1,32 @@
+{
+  "name": "peoplelikeme",
+  "version": "1.0.0",
+  "description": "Vibe-matched friendships for introverts. 18+, photo-free, scam-resistant.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "PLM_TEST=1 PLM_QUIET=1 node --no-warnings --test test/*.test.js",
+    "seed": "node --no-warnings scripts/seed.js",
+    "admin": "node --no-warnings scripts/admin.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Coding-Pro2026/PeopleLikeMe.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Coding-Pro2026/PeopleLikeMe/issues"
+  },
+  "homepage": "https://github.com/Coding-Pro2026/PeopleLikeMe#readme",
+  "dependencies": {
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}

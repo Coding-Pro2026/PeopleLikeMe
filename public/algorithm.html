@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How matching works · PeopleLikeMe</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%235b4bdb'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle'%3E%F0%9F%AB%B6%3C/text%3E%3C/svg%3E"><script src="/theme.js"></script><link rel="stylesheet" href="/styles.css"></head>
+<body><header class="top"><a class="brand" href="/#/">🫶 People<b>Like</b>Me</a><nav><a href="/#/signup" class="btn small">Join free</a></nav></header>
+<main class="doc">
+
+<h1>How the Vibe Engine works</h1>
+<p class="lead muted">No black box. Here is exactly how your match score is computed — and you can see both halves of it on every card.</p>
+<h2>The score, in one line</h2>
+<p><code>vibe = confidence × ( 0.6 × (0.55·P + 0.45·I) + 0.4 × P<sup>0.55</sup>·I<sup>0.45</sup> )</code></p>
+<ul>
+<li><strong>P — Personality (55%).</strong> Your Yes / Maybe / No answers are compared question by question. Each question has a weight (deep conversations and kindness count more than night-owl vs early-bird). “Maybe” carries less information, so it counts for less. For “flex” questions like planner vs spontaneous, opposites can still click, so disagreement is penalised half as hard.</li>
+<li><strong>I — Interests (45%).</strong> A cosine similarity over everything you picked, weighted by <em>rarity</em>: sharing a love of classical &amp; jazz says more than sharing a love of pizza. Related interests (anime ↔ manga) earn partial credit. The curve saturates, so ticking 30 boxes doesn’t help — honesty does. Typed favourites (“Spirited Away” ≈ “spirited away (2001)”) are fuzzy-matched for a small bonus.</li>
+<li><strong>Blend.</strong> Part arithmetic, part geometric mean — so a great match needs <em>both</em> a compatible temperament and common ground.</li>
+<li><strong>Confidence.</strong> If there’s little evidence (lots of “maybe”), the score is pulled toward the middle rather than overpromising.</li>
+</ul>
+<p>The score is <strong>symmetric</strong>: you and the other person always see the same number.</p>
+<h2>Choosing your 10</h2>
+<ol>
+<li>Only people inside <em>both</em> of your distance limits, who are verified and haven’t been blocked, passed or reported.</li>
+<li>Ranked by vibe, with a gentle boost for people closer to you.</li>
+<li><strong>Learns your taste:</strong> waves nudge similar people up; “Not for me” and Refresh nudge them down (by at most 6 points, so a poor match can never leapfrog a great one).</li>
+<li><strong>Diversity:</strong> a re-ranking step stops the list becoming ten near-identical people.</li>
+<li><strong>Wildcards:</strong> up to two slots go to people whose <em>temperament</em> clicks with yours but whose interests differ — friendships you’d never have searched for.</li>
+<li>Refresh never repeats someone you’ve just seen. When you’ve seen everyone nearby, you get a fresh round.</li>
+</ol>
+<h2>Surprise Spot</h2>
+<p>For every interest you pick we know which kinds of public places fit it (sci-fi → cinema, arcade, comic shop; baking → bakery, café…). For each place type we compute how likely <em>each</em> of you is to enjoy it, take the geometric mean of the two, <strong>remove any place type either of you listed under “Places I like to go”</strong>, then randomly draw — weighted by that fit — and pick a real, named public venue near the midpoint using OpenStreetMap. Because it’s weighted-random, a re-roll always gives something new.</p>
+<h2>What we do <em>not</em> use</h2>
+<p>No photos, no looks, no income, no follower counts, no “engagement” tricks. We don’t sell your data. Your score is a tool to help you start a conversation, not a judgement of you.</p>
+</main>
+<footer class="foot"><span>PeopleLikeMe · 18+ only</span><nav><a href="/algorithm.html">How matching works</a><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a></nav></footer></body></html>
