@@ -51,7 +51,11 @@ function avatar(card) {
 }
 function ring(total) {
   const c = total >= 75 ? 'var(--good)' : total >= 50 ? 'var(--brand)' : 'var(--warn)';
-  return h('div', { class: 'ring', style: { '--p': total, '--ringc': c }, role: 'img', 'aria-label': `${total}% vibe match` }, h('span', {}, total + '%'));
+  const num = h('span', {}, '0%');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) num.textContent = total + '%';
+  else { const t0 = performance.now() + 250; const tick = (t) => { const k = Math.min(1, Math.max(0, (t - t0) / 900)); num.textContent = Math.round(total * (1 - (1 - k) ** 3)) + '%'; if (k < 1) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
+  return h('div', { class: 'ring', style: { '--p': total, '--ringc': c }, role: 'img', 'aria-label': `${total}% vibe match` }, num);
 }
 function bar(label, v) { return h('div', { class: 'bar' }, h('span', {}, label), h('i', {}, h('b', { style: { '--v': v } })), h('span', {}, v + '%')); }
 function trustBadge(t) {
@@ -142,6 +146,14 @@ function personCard(card, { onChange, mode = 'discover' }) {
       h('button', { class: 'btn', onclick: () => openWave(card, '', remove) }, mode === 'inbox' ? 'Wave back 👋' : 'Say hi 👋'),
       h('button', { class: 'btn soft', onclick: () => openDetails(card, { remove, mode }) }, 'Details'),
       h('button', { class: 'btn ghost icon', 'aria-label': 'Not for me', title: 'Not for me', onclick: async () => { try { await api('POST', '/pass', { pid: card.pid }); remove(); } catch (x) { toast(x.message, true); } } }, '✕')));
+  if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    el.addEventListener('pointermove', (e) => {
+      const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      el.style.setProperty('--ry', (x * 14).toFixed(2) + 'deg'); el.style.setProperty('--rx', (-y * 12).toFixed(2) + 'deg');
+      el.style.setProperty('--mx', (x + 0.5) * 100 + '%'); el.style.setProperty('--my', (y + 0.5) * 100 + '%');
+    });
+    el.addEventListener('pointerleave', () => { el.style.setProperty('--ry', '0deg'); el.style.setProperty('--rx', '0deg'); });
+  }
   el.prepend(h('div', { class: 'avatar big', 'aria-hidden': 'true', style: { '--h': hue(card.pid || card.name) } }, card.tags?.[0]?.emoji || '🙂'));
   return el;
 }
@@ -178,7 +190,8 @@ views.landing = () => mount(
   h('section', { class: 'hero' },
     h('h1', {}, 'Finding friends shouldn’t feel like ', h('span', { class: 'grad' }, 'a performance.')),
     h('p', { class: 'lead' }, 'PeopleLikeMe matches you with people who share your vibe — your pace, your favourite films, your comfort foods — and nudges you toward a low-pressure first hello. No photos. No follower counts. No small-talk pressure.'),
-    h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/signup' }, 'Find my people →'), h('a', { class: 'btn ghost', href: '/algorithm.html' }, 'How the matching works'))),
+    h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/signup' }, 'Find my people →'), h('a', { class: 'btn ghost', href: '/algorithm.html' }, 'How the matching works')),
+    h('div', { class: 'stage', 'aria-hidden': 'true' }, [['Sample · 91%', '“deep-talker” & “recharge-alone”', '🍜', 24], ['Sample · 84%', 'both love “Lo-fi & chill”', '📚', 150], ['Sample · 78%', 'both into “Board & card games”', '🎲', 280]].map(([a, b, e, hh], i) => h('div', { class: 'sample s' + i, style: { '--h': hh } }, h('div', { class: 'avatar', style: { '--h': hh } }, e), h('strong', {}, a), h('span', {}, b))))),
   h('div', { class: 'grid3' },
     h('div', { class: 'panel' }, h('div', { class: 'big' }, '🧠'), h('h3', {}, 'A matching engine that gets you'), h('p', { class: 'muted' }, 'Yes / Maybe / No questions plus the things you love — weighted so rare shared passions count more. You see your exact score with everyone, and why.')),
     h('div', { class: 'panel' }, h('div', { class: 'big' }, '👋'), h('h3', {}, 'Wave. Only mutual waves chat.'), h('p', { class: 'muted' }, 'No cold DMs, no ghosting drama. When you both wave, a private chat opens with conversation starters built from what you share.')),
@@ -317,25 +330,51 @@ views.setup = () => {
 };
 
 views.discover = async () => {
+  $('#main').classList.add('wide');
   mount(h('p', { class: 'muted center' }, 'Finding your people…'));
   let data;
   try { data = await api('GET', '/matches'); } catch (x) { return mount(h('p', { class: 'err' }, x.message)); }
-  const grid = h('div', { class: 'cards' });
-  const head = h('div', { class: 'row' }, h('div', { style: { 'margin-right': 'auto' } }, h('h2', { style: { margin: 0 } }, 'Your people nearby'), h('p', { class: 'muted small', style: { margin: 0 } }, 'Same score for both of you · nothing happens until someone waves')));
-  const draw = (matches, recycled) => {
-    grid.replaceChildren(...matches.map((m) => personCard(m, { onChange: check })));
-    status.textContent = recycled ? 'You’ve seen everyone nearby — here’s a fresh round with new ordering.' : `${matches.length} suggestion${matches.length === 1 ? '' : 's'} · ${data.communitySize} members on PeopleLikeMe`;
-    check();
+  const deck = h('div', { class: 'deck', tabindex: '0', role: 'region', 'aria-label': 'Your suggested matches. Use arrow keys to scroll.' });
+  const status = h('p', { class: 'muted small', style: { margin: 0 } });
+  const fill = h('i', {}); const meter = h('div', { class: 'meter', 'aria-hidden': 'true' }, fill);
+  const prev = h('button', { class: 'navbtn', 'aria-label': 'Previous people', onclick: () => page(-1) }, '‹');
+  const next = h('button', { class: 'navbtn', 'aria-label': 'Next people', onclick: () => page(1) }, '›');
+  const perView = () => (deck.firstElementChild ? Math.max(1, Math.round(deck.clientWidth / deck.firstElementChild.getBoundingClientRect().width)) : 4);
+  const step = () => { const c = deck.firstElementChild; return c ? c.getBoundingClientRect().width + parseFloat(getComputedStyle(deck).columnGap || 20) : 300; };
+  const page = (dir) => deck.scrollBy({ left: dir * step() * perView(), behavior: 'smooth' });
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const n = deck.children.length, pv = perView(), first = Math.min(n, Math.round(deck.scrollLeft / step()) + 1);
+    const mid = deck.scrollLeft + deck.clientWidth / 2;
+    for (const c of deck.children) {                       // coverflow: cards lean toward the centre
+      const cm = c.offsetLeft + c.offsetWidth / 2, r = Math.max(-1, Math.min(1, (cm - mid) / (deck.clientWidth / 2)));
+      c.style.setProperty('--cf', (-r * 11).toFixed(1) + 'deg'); c.style.setProperty('--s', (1 - Math.abs(r) * 0.05).toFixed(3));
+    }
+    status.textContent = n ? `Showing ${first}–${Math.min(n, first + pv - 1)} of ${n} · same score for both of you · nothing happens until someone waves` : '';
+    fill.style.setProperty('--w', n ? Math.min(100, (pv / n) * 100) + '%' : '0%'); fill.style.setProperty('--x', n ? (deck.scrollLeft / Math.max(1, deck.scrollWidth - deck.clientWidth)) * (100 - Math.min(100, (pv / n) * 100)) + '%' : '0%');
+    prev.disabled = deck.scrollLeft < 4; next.disabled = deck.scrollLeft + deck.clientWidth >= deck.scrollWidth - 4;
+    meter.hidden = prev.hidden = next.hidden = n <= pv;
+    empty.hidden = n > 0;
   };
-  const check = () => { empty.hidden = grid.children.length > 0; };
+  const queue = () => { if (!raf) raf = requestAnimationFrame(update); };
+  deck.addEventListener('scroll', queue, { passive: true }); addEventListener('resize', queue);
+  deck.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') { e.preventDefault(); page(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); page(-1); } });
+  const draw = (matches) => {
+    deck.replaceChildren(...matches.map((m, i) => { const c = personCard(m, { onChange: queue }); c.style.setProperty('--i', i); return c; }));
+    deck.scrollTo({ left: 0 }); requestAnimationFrame(update);
+  };
   const refresh = h('button', { class: 'btn soft', onclick: async () => {
-    refresh.disabled = true;
-    try { const r = await api('POST', '/matches/refresh'); draw(r.matches, r.recycled); window.scrollTo(0, 0); } catch (x) { toast(x.message, true); } finally { refresh.disabled = false; }
+    refresh.disabled = true; deck.classList.add('flipping');
+    try {
+      const [r] = await Promise.all([api('POST', '/matches/refresh'), new Promise((ok) => setTimeout(ok, 320))]);
+      draw(r.matches); if (r.recycled) toast('You’ve seen everyone nearby — here’s a fresh round.');
+    } catch (x) { toast(x.message, true); } finally { deck.classList.remove('flipping'); refresh.disabled = false; }
   } }, '🔄 Not my type — refresh');
-  head.append(refresh);
-  const status = h('p', { class: 'muted small' });
   const empty = h('div', { class: 'empty', hidden: true }, h('div', { class: 'big' }, '🌱'), h('h3', {}, 'No one new right now'), h('p', {}, 'You may be one of the first in your area, or you’ve seen everyone nearby. Try refresh, widen your distance in Me → Edit profile, or invite a friend — every new member makes matching better.'));
-  mount(head, status, grid, empty);
+  mount(
+    h('div', { class: 'row discover-head' }, h('div', { style: { 'margin-right': 'auto' } }, h('p', { class: 'eyebrow' }, `${data.communitySize} members`), h('h2', { style: { margin: 0 } }, 'Your people nearby')), refresh),
+    h('div', { class: 'deckwrap' }, prev, deck, next), h('div', { class: 'row deckfoot' }, status, meter), empty);
   draw(data.matches);
 };
 
@@ -434,7 +473,7 @@ views.settings = () => {
 
 // ---------- router ----------
 async function route() {
-  clearTimers();
+  clearTimers(); $('#main').classList.remove('wide');
   const [, name = '', arg] = location.hash.replace(/^#/, '').split('/');
   const u = S.user;
   renderTop();
